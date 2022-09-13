@@ -1,0 +1,158 @@
+﻿@page "/grid"
+
+@using GridTest.Models
+@using GridTest.Services
+@using GridTest.Repository.IRepository
+@using Common
+@using global::Models
+@inject IProductRepository _productRepository
+@inject IProductPriceRepository _productPricerepository
+@inject NavigationManager _navigationManager
+@attribute [Authorize]
+
+<div class="container-fluid">
+    <div class='row my-4'>
+        <legend>Product Price embedded data grid</legend>
+        <br />
+        <div class='col-12 col-lg-9'>
+            @if(Products.Any())
+            {
+            <TelerikGrid Data="@Products"
+                         Pageable="true"
+                         PageSize="5"
+                         FilterMode="@GridFilterMode.FilterMenu"
+                         OnRowClick="@OnRowProductClickHandler"
+                         Sortable="true">
+                <GridColumns>
+                    <GridColumn Field=@nameof(ProductDTO.Id) Title="ID" Width="100px" />
+                    <GridColumn Field=@nameof(ProductDTO.Name) Title="Product Name" />
+                    <GridColumn Field=@nameof(ProductDTO.Color) />
+                </GridColumns>
+
+                <DetailTemplate>
+                    @{
+                        var productPrice = context as ProductDTO;
+                    <TelerikGrid Data="@productPrice.ProductPrices"
+                                     OnRowClick="@OnRowPriceClickHandler"
+                                     FilterMode="@GridFilterMode.FilterMenu"
+                                     Pageable="true"
+                                     Sortable="true"
+                                     PageSize="5">
+                            <GridColumns>
+                                <GridColumn Field=@nameof(ProductPriceDTO.Id) Title="Product Price ID" />
+                                <GridColumn Field=@nameof(ProductPriceDTO.Size) Title="Product Size" />
+                                <GridColumn Field=@nameof(ProductPriceDTO.Price) Title="Product Price" />
+                            </GridColumns>
+                        </TelerikGrid>
+                    }
+                </DetailTemplate>
+            </TelerikGrid>
+            <TelerikTreeView Data="@HierarchicalData" @bind-ExpandedItems="@ExpandedItems">
+            <TreeViewBindings>
+                <TreeViewBinding TextField="" ItemsField="ProductPrices"></TreeViewBinding>
+                <TreeViewBinding Level="1" TextField="Size"></TreeViewBinding>
+            </TreeViewBindings>
+            </TelerikTreeView>            
+            }
+            else
+            {
+             if(IsLoading)
+            {
+                <div class="text-center">
+                    <img src="/images/loading.gif">
+                </div>
+            }
+            else
+            {
+                <p>No records found</p>
+            }               
+            }
+
+    <TelerikWindow Modal="true" @bind-Visible="@isRowClicked">
+        <WindowTitle>
+            <div><strong>Size: </strong> @ProductPriceDetailsData.FirstOrDefault().Size</div>
+        </WindowTitle>
+        <WindowContent>
+            <div><strong>Price: </strong>@ProductPriceDetailsData.FirstOrDefault().Price</div>
+        </WindowContent>
+        <WindowActions>
+            <WindowAction Name="Minimize" />
+            <WindowAction Name="Maximize" />
+            <WindowAction Name="Close" />
+        </WindowActions>
+    </TelerikWindow>
+
+    <TelerikButton Icon="information" OnClick="@Show">More Info</TelerikButton>
+            <TelerikAnimationContainer @ref="@AnimationContainer" AnimationType="@AnimationType.SlideDown">
+                <div class="k-popup k-notification k-notification-info">
+                    <p>
+                        <TelerikIcon Icon="arrow-chevron-up" />
+                        Product<b> row </b>click to open category detail
+                        Price<b> row </b>click open price window
+                    </p>
+                </div>
+            </TelerikAnimationContainer>
+        </div>
+    </div>
+</div>
+
+@code {
+    private IEnumerable<ProductDTO> Products { get; set; } = new List<ProductDTO>();
+    public IEnumerable<ProductDTO> HierarchicalData { get; set; }
+    private IEnumerable<ProductPriceDTO> ProductPrices { get; set; } = new List<ProductPriceDTO>();
+    public List<ProductPriceDTO> ProductPriceDetailsData { get; set; } = new List<ProductPriceDTO>();
+    public bool IsLoading { get; set; }
+    public bool isRowClicked { get; set; }
+    public string EventLog { get; set; } = "";
+    public TelerikAnimationContainer AnimationContainer { get; set; }
+    public IEnumerable<object> ExpandedItems { get; set; } 
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if(firstRender)
+        {
+            LoadProducts();
+        }
+    }
+
+    private async Task LoadProducts()
+    {
+        IsLoading = true;
+        StateHasChanged();
+        Products = await _productRepository.GetAll();
+        ProductPrices = await _productPricerepository.GetAll();
+        ExpandedItems = Products;        
+        IsLoading = false;
+        HierarchicalData = Products;
+        ExpandedItems = Products.Take(1);
+        StateHasChanged();
+    }
+
+    async Task OnRowProductClickHandler(GridRowClickEventArgs args)
+    {
+        args.ShouldRender = true;
+        ProductDTO item = args.Item as ProductDTO;
+        var id = item.CategoryId;
+        _navigationManager.NavigateTo("/category/edit/" + id);
+    }
+
+    void OnRowPriceClickHandler(GridRowClickEventArgs args)
+    {
+        isRowClicked = true;
+        var item = args.Item as ProductPriceDTO;
+
+        ProductPriceDetailsData = ProductPrices.Where(x => x.Id == item.Id).ToList();
+
+        string log = $"<div><strong>Row Double Click event fired - Item: {item.Price}</strong>.</div>";
+        EventLog = EventLog.Insert(0, log);
+    }
+
+    public async void Show(MouseEventArgs args)
+    {
+        await AnimationContainer.ShowAsync();
+
+        await Task.Delay(6000);
+
+        await AnimationContainer.HideAsync();
+    }
+}

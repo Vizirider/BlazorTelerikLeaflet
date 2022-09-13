@@ -1,0 +1,62 @@
+﻿@using BlazorLeaflet.Samples.Data
+@implements IDisposable
+@using System.Diagnostics;
+@inject NavigationManager _navigationManager
+@inject IJSRuntime _jsRuntime
+
+<TelerikButton class="btn btn-primary mb-2" @onclick="ToggleClicked">@ButtonText</TelerikButton>
+@if(drawStarted)
+{
+    <p>You should draw to first point <kbd>finally</kbd></p>
+}
+<TelerikButton class="btn btn-primary mb-2" @onclick="ShowOnNewTab">Export Draw</TelerikButton>    
+
+@code {
+    [Parameter] public string ButtonText { get; set; }
+    [Parameter] public DrawHandler DrawHandler { get; set; }
+    [Parameter] public EventCallback<bool> OnToggleCallback { get; set; }
+    public bool drawStarted = false;
+    public bool drawFinished = false;
+    public string urlstring = "https://api.openstreetmap.org/api/0.6/map?bbox=";
+    public string downloadString = "";
+    public string info = "";
+
+    protected override void OnInitialized()
+    {
+        DrawHandler.DrawFinished += OnDrawFinished;
+        base.OnInitialized();
+    }
+
+    async Task ToggleClicked()
+    {
+        drawStarted = true;
+        await OnToggleCallback.InvokeAsync(true);
+    }
+
+    void OnDrawFinished(object sender, EventArgs e)
+    {
+        StateHasChanged();
+        drawFinished = true;
+        downloadString = urlstring + DrawHandler._minMaxLonLat[0].ToString().Replace(',', '.') + ","
+                        + DrawHandler._minMaxLonLat[1].ToString().Replace(',', '.') + ","
+                        + DrawHandler._minMaxLonLat[2].ToString().Replace(',', '.') + ","
+                        + DrawHandler._minMaxLonLat[3].ToString().Replace(',', '.');
+        Debug.WriteLine(downloadString);
+
+    }
+
+    public void Dispose()
+    {
+        DrawHandler.DrawFinished -= OnDrawFinished;
+        drawFinished = false;
+    }
+
+    private void ShowOnNewTab()
+    {
+        if (drawFinished)
+        {
+            Debug.WriteLine(downloadString);
+            _jsRuntime.InvokeVoidAsync("OpenNewTab", downloadString);
+        }
+    }
+}

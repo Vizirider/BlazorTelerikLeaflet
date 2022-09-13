@@ -1,0 +1,157 @@
+﻿@page "/pdfreader"
+@using Business.Repository.IRepository
+@using GridTest.Repository.IRepository
+@using GridTest.Models
+@using GridTest.Services
+@using BlazorInputFile
+@inject IFileRepository _fileRepository
+@inject NavigationManager _navigationManager
+@inject IJSRuntime _jsRuntime
+@attribute [Authorize]
+
+<div class="container-fluid">
+    <div class='row my-4'>
+        <legend>PDF Uploader / Reader</legend>
+        <style>
+            .k-upload-files {
+                max-height: 200px;
+                overflow-y: auto;
+            }
+
+            .k-form-hint {
+                display: block;
+                margin-top: 1em;
+            }
+
+            .demo-section>.kd-demo-heading {
+                padding-bottom: 0;
+                margin-bottom: 1em;
+            }
+            .iframe {
+                width: 40%; 
+                height: 60%;
+            }
+        </style>
+
+
+        <div class="demo-section k-form">
+            <div class="k-form-field">
+                <div class="k-form-field-wrap">
+                    <InputFile style="margin-top: 40px" OnChange="HandleFileSelected" />
+                    <div class="k-form-hint">Select only <strong>PDF</strong> files.</div>
+                </div>
+            </div>
+        </div>
+
+
+        <table class="table table-bordered" style="margin-top: 20px; width:60%; height: 60%">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>PDF Name</th>
+                    <th>View</th>
+                    <th>Delete</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (fileClass.Files != null && fileClass.Files.Count > 0)
+                {
+                    foreach (FileClass file in fileClass.Files)
+                    {
+                        <tr>
+                            <td>@file.FileId</td>
+                            <td>@file.Name</td>
+                            <td>
+                                <button class="btn btn-info" @onclick="@(e => ShowOnCurrentPage(@file.FileId))">Current
+                                    Page</button>
+                                <button class="btn btn-info" @onclick="@(e => ShowOnNewTab(@file.FileId))">New Page</button>
+                            </td>
+                            <td>
+                                <button class="btn btn-danger" @onclick="@(e => DeleteFile(@file.Path))">Delete File</button>
+                            </td>
+                        </tr>
+                    }
+                }
+                else
+                {
+
+                    if (IsLoading)
+                    {
+                        <div class="text-center">
+                            <img src="/images/loading.gif">
+                        </div>
+                    }
+                    else
+                    {
+                        <p>No records found</p>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+@if (!string.IsNullOrEmpty(@pdfName))
+{
+    <iframe class="iframe" src="/files/@pdfName"></iframe>
+}
+
+
+@code {
+    public FileClass fileClass = new();
+    [CascadingParameter]
+    public DialogFactory Dialogs { get; set; }
+    List<IFileListEntry> files = new();
+    public bool IsLoading { get; set; }
+    public string pdfName { get; set; } = "";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            IsLoading = true;
+            StateHasChanged();
+            fileClass.Files = _fileRepository.GetAllPDFs();
+            IsLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    async Task HandleFileSelected(IFileListEntry[] entryFiles)
+    {
+        files = new List<IFileListEntry>();
+        foreach (var file in entryFiles)
+        {
+            if (file != null)
+            {
+                await _fileRepository.Upload(file);
+                files.Add(file);
+            }
+        }
+        fileClass.Files = _fileRepository.GetAllPDFs();
+    }
+
+    private async Task DeleteFile(string path)
+    {
+        bool isConfirmed = await Dialogs.ConfirmAsync("Are you sure?", "Confirmation");
+
+        if (isConfirmed)
+        {
+            IsLoading = true;
+            await _fileRepository.Delete(path);
+            pdfName = "";
+            fileClass.Files = _fileRepository.GetAllPDFs();
+            IsLoading = false;
+        }
+    }
+
+    private void ShowOnCurrentPage(int fileId)
+    {
+        pdfName = fileClass.Files.SingleOrDefault(x => x.FileId == fileId).Name;
+    }
+
+    private void ShowOnNewTab(int fileId)
+    {
+        pdfName = fileClass.Files.SingleOrDefault(x => x.FileId == fileId).Name;
+        _jsRuntime.InvokeVoidAsync("OpenNewTab", pdfName);
+    }
+}

@@ -1,0 +1,199 @@
+﻿@page "/map"
+
+@page "/map/events"
+@using Business.Repository.IRepository
+@using global::Models
+@inject IDropdownRepository _dropdownRepository
+@inject IMarkerRepository _markerRepository
+
+<div class="container-fluid">
+    <div class='row my-4'>
+        <legend>Hungary with bubble (population) and marker </legend>
+    </div>
+</div>
+@if (MapMode.Any())
+{
+    <TelerikDropDownList Data="@MapMode"
+                     @bind-Value="@Value"
+                     TextField="ModeName"
+                     ValueField="ModeId"
+                     DefaultText="Select Mode"
+                     Width="100%">
+        <DropDownListSettings>
+            <DropDownListPopupSettings Height="auto"></DropDownListPopupSettings>
+        </DropDownListSettings>
+    </TelerikDropDownList>
+    <TelerikMap Center="@Center"
+            MinZoom="3"
+            MaxZoom="11"
+            Zoom="7"
+            WrapAround="false"
+            OnClick="@OnMapClick"
+            OnShapeClick="@OnShapeClick"
+            OnMarkerClick="@OnMarkerClick">
+        <MapLayers>
+            <MapLayer Type="@MapLayersType.Tile"
+                  Attribution="@Attribution"
+                  Subdomains="@Subdomains"
+                  UrlTemplate="@UrlTemplate">
+            </MapLayer>
+            @if (Value == 1)
+            {
+                <MapLayer Type="@MapLayersType.Bubble"
+                  Data="@BubbleData1"
+                  LocationField="@nameof(BubbleModel.LatLng)"
+                  ValueField="@nameof(BubbleModel.Population_2010)">
+                    <MapLayerBubbleSettings>
+                        <MapLayerBubbleSettingsStyle>
+                            <MapLayerBubbleSettingsStyleFill Color="#0000ff"></MapLayerBubbleSettingsStyleFill>
+                            <MapLayerBubbleSettingsStyleStroke Color="#000000"></MapLayerBubbleSettingsStyleStroke>
+                        </MapLayerBubbleSettingsStyle>
+                    </MapLayerBubbleSettings>
+                </MapLayer>
+            }
+            else
+            {
+                <MapLayer Type="@MapLayersType.Marker"
+                  Data="@MarkerData1"
+                  LocationField="@nameof(MarkerModel.LatLng)"
+                  TitleField="@nameof(MarkerModel.Address)">
+                </MapLayer>
+            }
+        </MapLayers>
+    </TelerikMap>
+}
+else
+{
+    if (IsLoading)
+    {
+        <div class="text-center">
+            <img src="/images/loading.gif">
+        </div>
+    }
+    else
+    {
+        <p>No records found</p>
+    }
+}
+
+
+<DemoConsole EventLog="@EventLog" OnClearLogClick="@OnClearLogClick" />
+
+@code {
+    private IEnumerable<DropdownDTO> MapMode { get; set; } = new List<DropdownDTO>();
+    private IEnumerable<MarkerDTO> MarkerDatas { get; set; } = new List<MarkerDTO>();
+    public List<MarkerModel> MarkerData1 { get; set; } = new List<MarkerModel>();
+    public List<BubbleModel> BubbleData1 { get; set; } = new List<BubbleModel>();
+    public bool IsLoading { get; set; }
+    public string EventLog { get; set; } = string.Empty;
+
+    public string[] Subdomains { get; set; } = new string[] { "a", "b", "c" };
+    public string UrlTemplate { get; set; } = "https://#= subdomain #.tile.openstreetmap.org/#= zoom #/#= x #/#= y #.png";
+    public string Attribution { get; set; } = "&copy; <a href='https://osm.org/copyright'>OpenStreetMap contributors</a>";
+    public double[] Center { get; set; } = new double[] { 47, 20 };
+    public int Value { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadMarkers();
+        }
+    }
+
+    private async Task LoadMarkers()
+    {
+        IsLoading = true;
+        StateHasChanged();
+        MapMode = await _dropdownRepository.GetAll();
+        MarkerDatas = await _markerRepository.GetAll();
+
+        foreach(var datas in MarkerDatas)
+        {
+            MarkerModel MarkerData = new()
+                {
+                    Address = datas.Address,
+                    LatLng = new double[] { datas.Latitude, datas.Longitude }
+                };
+            BubbleModel BubbleData = new()
+                {
+                    City = datas.Address,
+                    LatLng = new double[] { datas.Latitude, datas.Longitude },
+                    Population_2010 = datas.Population
+                };
+            MarkerData1.Add(MarkerData);
+            BubbleData1.Add(BubbleData);
+        }
+
+        IsLoading = false;
+        StateHasChanged();
+    }
+
+    public void OnMapClick(MapClickEventArgs args)
+    {
+        var location = args.Location;
+        var mouseEventArgs = args.EventArgs as MouseEventArgs;
+
+        var log = string.Empty;
+        log += "<div>";
+        log += $"<div><strong>Map Click event</strong> at location <strong>[{location.Latitude}, {location.Longitude}]</strong>.</div>";
+        log += $"<div>Mouse Position: {mouseEventArgs.ClientX}, {mouseEventArgs.ClientY}</div>";
+        log += "</div>";
+
+        LogToConsole(log);
+    }
+
+    public void OnMarkerClick(MapMarkerClickEventArgs args)
+    {
+        var dataItem = args.DataItem as MarkerModel;
+        var mouseEventArgs = args.EventArgs as MouseEventArgs;
+
+        var log = string.Empty;
+        log += "<div>";
+        log += $"<div><strong>Marker Click event</strong> on <strong>{dataItem.Address}</strong> ";
+        log += $"at location <strong>[{string.Join(",", dataItem.LatLng)}]</strong>.</div>";
+        log += $"<div>Mouse Position: {mouseEventArgs.ClientX}, {mouseEventArgs.ClientY}.</div>";
+        log += "</div>";
+
+        LogToConsole(log);
+    }
+
+    public void OnShapeClick(MapShapeClickEventArgs args)
+    {
+        var dataItem = args.DataItem as BubbleModel;
+        var mouseEventArgs = args.EventArgs as MouseEventArgs;
+
+        var log = string.Empty;
+        log += "<div>";
+        log += $"<div><strong>Shape Click event</strong> on <strong>{dataItem.City}</strong> ";
+        log += $"at location <strong>[{string.Join(",", dataItem.LatLng)}]</strong>.</div>";
+        log += $"<div>Mouse Position: {mouseEventArgs.ClientX}, {mouseEventArgs.ClientY}.</div>";
+        log += "</div>";
+
+        LogToConsole(log);
+    }
+
+    public void LogToConsole(string text)
+    {
+        EventLog = EventLog.Insert(0, text);
+    }
+
+    public void OnClearLogClick()
+    {
+        EventLog = string.Empty;
+    }
+
+    public class MarkerModel
+    {
+        public double[] LatLng { get; set; }
+        public string Address { get; set; }
+    }
+
+    public class BubbleModel
+    {
+        public double[] LatLng { get; set; }
+        public string City { get; set; }
+        public string Country { get; set; }
+        public int Population_2010 { get; set; }
+    }
+}
